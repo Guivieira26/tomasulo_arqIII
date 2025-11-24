@@ -38,7 +38,7 @@ class EntradaROB:
 
 class SimuladorTomasulo:
     def __init__(self):
-        self.latencias = {'ADD': 2, 'SUB': 2, 'MUL': 10, 'DIV': 40, 'BEQ': 1}
+        self.latencias = {'ADD': 2, 'SUB': 2, 'MUL': 8, 'DIV': 10, 'BEQ': 1}
         self.regs_iniciais = {'R1': 10, 'R2': 20, 'R3': 30} 
         self.history = [] 
         self.reset()
@@ -281,7 +281,7 @@ class EntradaROB:
 
 class SimuladorTomasulo:
     def __init__(self):
-        self.latencias = {'ADD': 2, 'SUB': 2, 'MUL': 10, 'DIV': 40, 'BEQ': 1}
+        self.latencias = {'ADD': 2, 'SUB': 2, 'MUL': 8, 'DIV': 10, 'BEQ': 1}
         self.regs_iniciais = {'R1': 10, 'R2': 20, 'R3': 30} 
         self.history = [] 
         self.reset()
