@@ -1,0 +1,3 @@
+ -> pipeline superescalar
+ -> pipeline escalar
+ -> dependencias falsa e verdadeira 
