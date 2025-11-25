@@ -1,260 +1,370 @@
-# tomasulo_gui.py
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, font
 from tomasulo_engine import SimuladorTomasulo
+
+# --- PALETA DE CORES (Modern UI) ---
+COLORS = {
+    'bg_app': '#F0F2F5',        # Fundo cinza claro (estilo Dashboard)
+    'bg_card': '#FFFFFF',       # Fundo dos "cartões"
+    'primary': '#1877F2',       # Azul Facebook/Moderno para ações principais
+    'secondary': '#E4E6EB',     # Cinza para botões secundários
+    'success': '#42B72A',       # Verde para "Próximo"
+    'danger': '#DC3545',        # Vermelho para Reset/Flush
+    'text': '#050505',          # Preto suave
+    'text_light': '#65676B',    # Cinza para subtítulos
+    'header_table': '#F7F8FA',  # Cabeçalho das tabelas
+    'border': '#DCDFE3'         # Bordas sutis
+}
 
 class TomasuloGUI:
     def __init__(self, root):
         self.sim = SimuladorTomasulo()
         self.root = root
-        self.root.title("Simulador Tomasulo - Visual Pro")
-        self.root.geometry("1200x750")
+        self.root.title("Simulador Tomasulo - Architecture View")
+        self.root.geometry("1280x850")
+        self.root.configure(bg=COLORS['bg_app'])
         
+        # Configuração de Fontes
+        self.font_title = font.Font(family="Segoe UI", size=14, weight="bold")
+        self.font_subtitle = font.Font(family="Segoe UI", size=11, weight="bold")
+        self.font_ui = font.Font(family="Segoe UI", size=10)
+        self.font_mono = font.Font(family="Consolas", size=10)
+
+        self.apply_styles()
         self.setup_ui()
         self.update_view()
 
-    def setup_ui(self):
+    def apply_styles(self):
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure("Treeview", font=('Arial', 9), rowheight=22)
-        style.configure("Treeview.Heading", font=('Arial', 10, 'bold'), background="#ddd")
-
-        # --- Frames ---
-        top_frame = tk.Frame(self.root, pady=10, padx=10)
-        top_frame.pack(fill=tk.X)
         
-        center_frame = tk.Frame(self.root, padx=10)
-        center_frame.pack(expand=True, fill=tk.BOTH)
+        # Configuração Geral das Treeviews (Tabelas)
+        style.configure("Treeview", 
+                        background="white",
+                        foreground=COLORS['text'],
+                        fieldbackground="white",
+                        rowheight=28,  # Mais espaço entre linhas
+                        font=self.font_ui,
+                        borderwidth=0)
         
-        bottom_frame = tk.Frame(self.root, height=150, padx=10, pady=10)
-        bottom_frame.pack(fill=tk.X)
-
-        # --- Botões ---
-        tk.Button(top_frame, text="⚙ Configurar", command=self.open_config_window, bg="#ddddff").pack(side=tk.LEFT, padx=5)
-        tk.Button(top_frame, text="Resetar", command=self.reset_sim, bg="#ffcccc").pack(side=tk.LEFT, padx=5)
-        tk.Button(top_frame, text="<< Voltar Ciclo", command=self.prev_step, bg="#ffebcd").pack(side=tk.LEFT, padx=20)
+        style.configure("Treeview.Heading", 
+                        background=COLORS['header_table'],
+                        foreground=COLORS['text'],
+                        font=self.font_subtitle,
+                        relief="flat")
         
-        self.btn_step = tk.Button(top_frame, text="Próximo Ciclo >>", command=self.next_step, bg="#ccffcc", font=('Arial', 11, 'bold'))
-        self.btn_step.pack(side=tk.LEFT, padx=5)
+        style.map("Treeview", background=[('selected', COLORS['primary'])])
         
-        # Botão extra para ver métricas a qualquer momento
-        tk.Button(top_frame, text="Relatório", command=self.mostrar_relatorio, bg="#eeeeee").pack(side=tk.LEFT, padx=5)
+        # Frames "Cards"
+        style.configure("Card.TFrame", background=COLORS['bg_card'], relief="flat")
 
-        self.lbl_ciclo = tk.Label(top_frame, text="Ciclo: 0", font=("Arial", 16, "bold"), fg="blue")
-        self.lbl_ciclo.pack(side=tk.RIGHT, padx=20)
+    def setup_ui(self):
+        # Container Principal com Padding
+        main_container = tk.Frame(self.root, bg=COLORS['bg_app'])
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        # --- TABELAS ---
-        # 1. RS
-        frame_rs = tk.LabelFrame(center_frame, text="Estações de Reserva (Reservation Stations)", font=('Arial', 10, 'bold'))
-        frame_rs.pack(fill=tk.X, pady=5)
-        cols_rs = ("Nome", "Busy", "Op", "Vj", "Vk", "Qj", "Qk", "Dest (ROB)", "Tempo")
-        self.tree_rs = ttk.Treeview(frame_rs, columns=cols_rs, show='headings', height=6)
-        for col in cols_rs:
-            self.tree_rs.heading(col, text=col)
-            self.tree_rs.column(col, width=80, anchor=tk.CENTER)
-        self.tree_rs.pack(fill=tk.X)
+        # --- 1. HEADER & CONTROLES ---
+        header_frame = tk.Frame(main_container, bg=COLORS['bg_app'])
+        header_frame.pack(fill=tk.X, pady=(0, 15))
 
-        # 2. ROB
-        frame_rob = tk.LabelFrame(center_frame, text="Reorder Buffer (ROB)", font=('Arial', 10, 'bold'))
-        frame_rob.pack(fill=tk.X, pady=5)
-        cols_rob = ("ID", "Tipo", "Destino", "Valor", "Pronto?", "Instrução Original")
-        self.tree_rob = ttk.Treeview(frame_rob, columns=cols_rob, show='headings', height=6)
-        for col in cols_rob:
-            self.tree_rob.heading(col, text=col)
-            self.tree_rob.column(col, width=100, anchor=tk.CENTER)
-        self.tree_rob.pack(fill=tk.X)
+        # Título e Ciclo
+        info_frame = tk.Frame(header_frame, bg=COLORS['bg_app'])
+        info_frame.pack(side=tk.LEFT)
+        tk.Label(info_frame, text="Simulador Tomasulo", font=("Segoe UI", 18, "bold"), 
+                 bg=COLORS['bg_app'], fg=COLORS['text']).pack(anchor="w")
+        self.lbl_ciclo = tk.Label(info_frame, text="Ciclo: 0", font=("Segoe UI", 12), 
+                                  bg=COLORS['bg_app'], fg=COLORS['text_light'])
+        self.lbl_ciclo.pack(anchor="w")
 
-        # 3. Dados
-        frame_data = tk.Frame(center_frame)
-        frame_data.pack(fill=tk.BOTH, expand=True, pady=5)
+        # Botões de Ação (Estilizados manualmente para ter cores de fundo customizadas)
+        btn_frame = tk.Frame(header_frame, bg=COLORS['bg_app'])
+        btn_frame.pack(side=tk.RIGHT)
+
+        self.create_button(btn_frame, "⚙ Config", self.open_config_window, COLORS['secondary'], COLORS['text'])
+        self.create_button(btn_frame, "↺ Reset", self.reset_sim, COLORS['secondary'], COLORS['danger'])
+        self.create_button(btn_frame, "📊 Relatório", self.mostrar_relatorio, COLORS['secondary'], COLORS['text'])
         
-        frame_rat = tk.LabelFrame(frame_data, text="RAT")
-        frame_rat.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
-        self.tree_rat = ttk.Treeview(frame_rat, columns=("Reg", "ROB Ref"), show='headings')
-        self.tree_rat.heading("Reg", text="Reg")
-        self.tree_rat.heading("ROB Ref", text="ROB")
-        self.tree_rat.pack(fill=tk.BOTH, expand=True)
+        # Separador visual
+        tk.Frame(btn_frame, width=20, bg=COLORS['bg_app']).pack(side=tk.LEFT)
 
-        frame_reg = tk.LabelFrame(frame_data, text="Registradores")
-        frame_reg.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
-        self.tree_reg = ttk.Treeview(frame_reg, columns=("Reg", "Valor"), show='headings')
-        self.tree_reg.heading("Reg", text="Reg")
-        self.tree_reg.heading("Valor", text="Valor")
-        self.tree_reg.pack(fill=tk.BOTH, expand=True)
+        self.create_button(btn_frame, "❮ Voltar", self.prev_step, "#FFC107", "#333") # Amarelo Warning
+        self.create_button(btn_frame, "Avançar ❯", self.next_step, COLORS['primary'], "white", bold=True)
 
-        # --- LOG ---
-        frame_log = tk.LabelFrame(bottom_frame, text="Log de Execução")
-        frame_log.pack(fill=tk.BOTH, expand=True)
-        self.txt_log = tk.Text(frame_log, height=5, bg="#f4f4f4", font=("Consolas", 10))
-        self.txt_log.pack(fill=tk.BOTH, expand=True)
+        # --- 2. ÁREA DE DADOS (Split Vertical) ---
+        # Usaremos PanedWindow para permitir redimensionar, ou apenas frames. Frames são mais estáveis.
+        
+        # TOP SECTION: RS e ROB
+        top_section = tk.Frame(main_container, bg=COLORS['bg_app'])
+        top_section.pack(fill=tk.BOTH, expand=True)
+
+        # Esquerda: Estações de Reserva
+        self.frame_rs = self.create_card(top_section, "Estações de Reserva (Reservation Stations)")
+        self.frame_rs.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        cols_rs = ("Nome", "Busy", "Op", "Vj", "Vk", "Qj", "Qk", "Dest", "Tempo")
+        self.tree_rs = self.create_table(self.frame_rs, cols_rs, height=8)
+
+        # Direita: ROB
+        self.frame_rob = self.create_card(top_section, "Reorder Buffer (ROB)")
+        self.frame_rob.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        
+        cols_rob = ("ID", "Tipo", "Dest", "Valor", "Pronto?", "Instrução")
+        self.tree_rob = self.create_table(self.frame_rob, cols_rob, height=8)
+
+        # --- 3. ÁREA INFERIOR: RAT, REGS e LOG ---
+        bottom_section = tk.Frame(main_container, bg=COLORS['bg_app'])
+        bottom_section.pack(fill=tk.BOTH, expand=True, pady=(15, 0))
+
+        # Lado Esquerdo Inferior: RAT e Registradores
+        left_bottom = tk.Frame(bottom_section, bg=COLORS['bg_app'])
+        left_bottom.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+
+        # RAT
+        self.frame_rat = self.create_card(left_bottom, "RAT (Alias Table)")
+        self.frame_rat.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        self.tree_rat = self.create_table(self.frame_rat, ("Reg", "ROB Ref"), height=6)
+
+        # Regs
+        self.frame_reg = self.create_card(left_bottom, "Banco de Registradores")
+        self.frame_reg.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        self.tree_reg = self.create_table(self.frame_reg, ("Reg", "Valor"), height=6)
+
+        # Lado Direito Inferior: LOG
+        self.frame_log = self.create_card(bottom_section, "Event Log")
+        self.frame_log.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # Scrollbar para o Log
+        log_scroll = ttk.Scrollbar(self.frame_log)
+        log_scroll.pack(side=tk.RIGHT, fill=tk.Y, pady=5, padx=(0, 5))
+        
+        self.txt_log = tk.Text(self.frame_log, height=6, bg="white", fg=COLORS['text'],
+                               font=self.font_mono, relief="flat", state="normal",
+                               yscrollcommand=log_scroll.set)
+        self.txt_log.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        log_scroll.config(command=self.txt_log.yview)
+
+        # Configurar Cores do Log (Tags)
+        self.txt_log.tag_config("ISSUE", foreground="#E67E22", font=("Consolas", 10, "bold")) # Laranja
+        self.txt_log.tag_config("COMMIT", foreground=COLORS['success'], font=("Consolas", 10, "bold")) # Verde
+        self.txt_log.tag_config("FLUSH", foreground=COLORS['danger'], font=("Consolas", 10, "bold")) # Vermelho
+        self.txt_log.tag_config("WRITE", foreground=COLORS['primary']) # Azul
+
+    # --- HELPER FUNCTIONS FOR UI ---
+    
+    def create_card(self, parent, title):
+        """Cria um container branco com título estilo 'Card'"""
+        card = tk.Frame(parent, bg=COLORS['bg_card'], highlightbackground=COLORS['border'], 
+                        highlightthickness=1, padx=10, pady=10)
+        
+        lbl_title = tk.Label(card, text=title, font=self.font_subtitle, 
+                             bg=COLORS['bg_card'], fg=COLORS['primary'])
+        lbl_title.pack(anchor="w", pady=(0, 10))
+        return card
+
+    def create_button(self, parent, text, command, bg, fg, bold=False):
+        """Cria um botão plano moderno"""
+        f = ("Segoe UI", 10, "bold") if bold else ("Segoe UI", 10)
+        btn = tk.Button(parent, text=text, command=command, 
+                        bg=bg, fg=fg, font=f,
+                        relief="flat", activebackground=bg, cursor="hand2",
+                        padx=15, pady=5, borderwidth=0)
+        btn.pack(side=tk.LEFT, padx=5)
+        return btn
+
+    def create_table(self, parent, columns, height):
+        """Cria uma Treeview configurada com Scrollbar"""
+        frame = tk.Frame(parent, bg=COLORS['bg_card'])
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        scroll = ttk.Scrollbar(frame)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        tree = ttk.Treeview(frame, columns=columns, show='headings', height=height, 
+                            yscrollcommand=scroll.set)
+        
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=80, anchor=tk.CENTER)
+            
+        tree.pack(fill=tk.BOTH, expand=True)
+        scroll.config(command=tree.yview)
+        return tree
 
     # =========================================================================
-    # JANELA DE CONFIGURAÇÃO
+    # LÓGICA DE INTEGRAÇÃO (Mesma do anterior, apenas adaptada à nova UI)
     # =========================================================================
-    def open_config_window(self):
-        top = tk.Toplevel(self.root)
-        top.title("Configurações do Simulador")
-        top.geometry("600x600")
 
-        # 1. Latências
-        lbl_frame_lat = tk.LabelFrame(top, text="Latências (Ciclos)", padx=10, pady=10)
-        lbl_frame_lat.pack(fill=tk.X, padx=10, pady=5)
-        
-        self.entries_lat = {}
-        row = 0
-        col = 0
-        for op, val in self.sim.latencias.items():
-            tk.Label(lbl_frame_lat, text=op).grid(row=row, column=col, sticky="e")
-            entry = tk.Entry(lbl_frame_lat, width=5)
-            entry.insert(0, str(val))
-            entry.grid(row=row, column=col+1, padx=5, pady=5)
-            self.entries_lat[op] = entry
-            col += 2
-            if col > 4: 
-                col = 0
-                row += 1
+    def log_msg(self, msg):
+        self.txt_log.config(state="normal")
+        # Inserção com verificação de TAGs para colorir
+        lines = msg.split("\n")
+        for line in lines:
+            if not line: continue
+            tag = "NORMAL"
+            if "[ISSUE]" in line: tag = "ISSUE"
+            elif "[COMMIT]" in line: tag = "COMMIT"
+            elif "[FLUSH]" in line: tag = "FLUSH"
+            elif "[WRITE]" in line: tag = "WRITE"
+            
+            self.txt_log.insert(tk.END, line + "\n", tag)
+            
+        self.txt_log.see(tk.END)
+        self.txt_log.config(state="disabled") # Read-only
 
-        # 2. Valores Iniciais dos Registradores
-        lbl_frame_regs = tk.LabelFrame(top, text="Registradores Iniciais (Ex: R1=10, R2=50)", padx=10, pady=10)
-        lbl_frame_regs.pack(fill=tk.X, padx=10, pady=5)
-        
-        self.txt_regs = tk.Text(lbl_frame_regs, height=3)
-        self.txt_regs.pack(fill=tk.X)
-        regs_str = ", ".join([f"{k}={v}" for k,v in self.sim.regs_iniciais.items()])
-        self.txt_regs.insert(tk.END, regs_str)
-
-        # 3. Código do Programa
-        lbl_frame_prog = tk.LabelFrame(top, text="Código do Programa (Instruções)", padx=10, pady=10)
-        lbl_frame_prog.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        self.txt_prog = tk.Text(lbl_frame_prog, height=10)
-        self.txt_prog.pack(fill=tk.BOTH, expand=True)
-        
-        prog_text = ""
-        for inst in self.sim.fila_instrucoes:
-            prog_text += f"{inst.op} {inst.dest}, {inst.s1}, {inst.s2}\n"
-        if not prog_text:
-            prog_text = "ADD R1, R2, R3\nMUL R4, R1, R2\nSUB R5, R3, R1\nDIV R6, R4, R2"
-        self.txt_prog.insert(tk.END, prog_text)
-
-        btn_save = tk.Button(top, text="Salvar Configurações e Reiniciar", bg="#88ff88", 
-                             command=lambda: self.save_config(top))
-        btn_save.pack(pady=10)
-
-    def save_config(self, window):
-        novas_latencias = {}
-        for op, entry in self.entries_lat.items():
-            try: novas_latencias[op] = int(entry.get())
-            except ValueError: pass
-
-        novos_regs = {}
-        raw_regs = self.txt_regs.get("1.0", tk.END).replace("\n", "").split(",")
-        for item in raw_regs:
-            parts = item.split("=")
-            if len(parts) == 2:
-                reg = parts[0].strip().upper()
-                try: novos_regs[reg] = int(parts[1].strip())
-                except ValueError: pass
-
-        prog_txt = self.txt_prog.get("1.0", tk.END).strip().split("\n")
-
-        self.sim.set_config(novas_latencias, novos_regs)
-        self.sim.reset()
-        self.sim.carregar_instrucoes(prog_txt)
-        
-        self.log_msg("Novas configurações aplicadas!")
-        self.update_view()
-        window.destroy()
-
-    # =========================================================================
-    # CONTROLES E MÉTRICAS
-    # =========================================================================
     def next_step(self):
-        # Verifica se já acabou antes de rodar
         if self.sim.esta_terminado():
             self.mostrar_relatorio()
             return
-
         msg = self.sim.executar_ciclo()
-        if msg:
-            self.log_msg(msg)
+        if msg: self.log_msg(msg)
         self.update_view()
-        
-        # Verifica se acabou LOGO APÓS rodar o ciclo
-        if self.sim.esta_terminado():
-            self.mostrar_relatorio()
-
-    def mostrar_relatorio(self):
-        m = self.sim.metricas
-        ciclos = self.sim.ciclo
-        ipc = m['commits'] / cycles if (cycles := ciclos) > 0 else 0
-        
-        relatorio = (
-            f"--- SIMULAÇÃO FINALIZADA ---\n\n"
-            f"Ciclos Totais: {ciclos}\n"
-            f"Instruções Commitadas: {m['commits']}\n"
-            f"IPC (Instr/Ciclo): {ipc:.2f}\n"
-            f"Ciclos de Bolha (Stalls): {m['bolhas']}\n"
-            f"Flushes (Desvios): {m['flushes']}\n"
-        )
-        messagebox.showinfo("Métricas de Desempenho", relatorio)
+        if self.sim.esta_terminado(): self.mostrar_relatorio()
 
     def prev_step(self):
         msg = self.sim.voltar_ciclo()
         if msg:
-            self.txt_log.delete(1.0, tk.END)
-            self.log_msg("<< " + msg)
+            self.txt_log.config(state="normal")
+            self.txt_log.delete(1.0, tk.END) # Limpa log ao voltar
+            self.txt_log.insert(tk.END, f"--- {msg} ---\n", "WRITE")
+            self.txt_log.config(state="disabled")
+        self.update_view()
+
+    def reset_sim(self):
+        self.sim.reset()
+        self.txt_log.config(state="normal")
+        self.txt_log.delete(1.0, tk.END)
+        self.txt_log.config(state="disabled")
         self.update_view()
 
     def load_example(self):
         self.reset_sim()
         prog = ["ADD R1, R2, R3", "MUL R4, R1, R2", "SUB R5, R3, R1", "DIV R6, R4, R2"]
         self.sim.carregar_instrucoes(prog)
-        self.log_msg("Exemplo Padrão carregado.")
+        self.log_msg("Exemplo carregado.")
         self.update_view()
-
-    def reset_sim(self):
-        self.sim.reset()
-        self.txt_log.delete(1.0, tk.END)
-        self.update_view()
-
-    def log_msg(self, msg):
-        self.txt_log.insert(tk.END, msg)
-        self.txt_log.see(tk.END)
 
     def update_view(self):
-        self.lbl_ciclo.config(text=f"Ciclo: {self.sim.ciclo}")
+        # Header Info
+        self.lbl_ciclo.config(text=f"Ciclo Atual: {self.sim.ciclo}")
 
-        # RS
-        for item in self.tree_rs.get_children(): self.tree_rs.delete(item)
+        # Limpeza das Tabelas
+        for t in [self.tree_rs, self.tree_rob, self.tree_rat, self.tree_reg]:
+            for item in t.get_children(): t.delete(item)
+
+        # 1. RS
         todas_rs = self.sim.rs_add + self.sim.rs_mul
         for rs in todas_rs:
             qj = rs.qj if rs.qj is not None else ""
             qk = rs.qk if rs.qk is not None else ""
             dest = rs.dest if rs.busy else ""
+            status_busy = "🔴 Busy" if rs.busy else "🟢 Free"
+            
             self.tree_rs.insert("", "end", values=(
-                rs.nome, "SIM" if rs.busy else "", rs.op if rs.op else "",
-                rs.vj if rs.vj is not None else "", rs.vk if rs.vk is not None else "",
+                rs.nome, status_busy, rs.op if rs.op else "-",
+                rs.vj if rs.vj is not None else "-", rs.vk if rs.vk is not None else "-",
                 qj, qk, dest, rs.tempo_restante
             ))
 
-        # ROB
-        for item in self.tree_rob.get_children(): self.tree_rob.delete(item)
+        # 2. ROB
         for rob in self.sim.rob:
             if rob.busy:
-                pronto = "SIM" if rob.pronto else "NÃO"
+                pronto_icon = "✅ Sim" if rob.pronto else "⏳ Não"
                 self.tree_rob.insert("", "end", values=(
-                    rob.id, rob.tipo, rob.dest, rob.valor, pronto, str(rob.instrucao)
+                    rob.id, rob.tipo, rob.dest, rob.valor, pronto_icon, str(rob.instrucao)
                 ))
 
-        # RAT e REGS
-        for item in self.tree_rat.get_children(): self.tree_rat.delete(item)
-        for item in self.tree_reg.get_children(): self.tree_reg.delete(item)
-        for i in range(10):
+        # 3. RAT & Regs (Limitado a 16 para caber sem scroll infinito)
+        for i in range(16):
             r = f"R{i}"
-            rat = self.sim.rat[r] if self.sim.rat[r] is not None else ""
-            self.tree_rat.insert("", "end", values=(r, rat))
+            rat_val = self.sim.rat[r] if self.sim.rat[r] is not None else "-"
+            self.tree_rat.insert("", "end", values=(r, rat_val))
             self.tree_reg.insert("", "end", values=(r, self.sim.regs[r]))
+
+    # --- JANELA CONFIG (Adaptação Visual) ---
+    def open_config_window(self):
+        top = tk.Toplevel(self.root)
+        top.title("Configurações")
+        top.geometry("500x600")
+        top.configure(bg=COLORS['bg_app'])
+
+        def section_lbl(text):
+            return tk.Label(top, text=text, font=self.font_subtitle, bg=COLORS['bg_app'], fg=COLORS['primary'])
+
+        # Latências
+        section_lbl("Latências (Ciclos)").pack(pady=(15, 5))
+        frame_lat = tk.Frame(top, bg="white", padx=10, pady=10)
+        frame_lat.pack(padx=20, fill=tk.X)
+        
+        self.entries_lat = {}
+        r, c = 0, 0
+        for op, val in self.sim.latencias.items():
+            tk.Label(frame_lat, text=op, bg="white").grid(row=r, column=c, padx=5, sticky="e")
+            entry = tk.Entry(frame_lat, width=5, relief="solid", bd=1)
+            entry.insert(0, str(val))
+            entry.grid(row=r, column=c+1, padx=5, pady=5)
+            self.entries_lat[op] = entry
+            c += 2
+            if c > 2:
+                c = 0; r += 1
+
+        # Registradores
+        section_lbl("Registradores Iniciais").pack(pady=(15, 5))
+        self.txt_regs = tk.Text(top, height=2, font=("Consolas", 10), relief="flat", bd=1)
+        self.txt_regs.pack(padx=20, fill=tk.X)
+        regs_str = ", ".join([f"{k}={v}" for k,v in self.sim.regs_iniciais.items()])
+        self.txt_regs.insert(tk.END, regs_str)
+
+        # Programa
+        section_lbl("Código do Programa").pack(pady=(15, 5))
+        self.txt_prog = tk.Text(top, height=8, font=("Consolas", 10), relief="flat", bd=1)
+        self.txt_prog.pack(padx=20, fill=tk.BOTH, expand=True)
+        
+        prog_text = ""
+        for inst in self.sim.fila_instrucoes:
+            prog_text += f"{inst.op} {inst.dest}, {inst.s1}, {inst.s2}\n"
+        if not prog_text: prog_text = "ADD R1, R2, R3\nMUL R4, R1, R2\nSUB R5, R3, R1\nDIV R6, R4, R2"
+        self.txt_prog.insert(tk.END, prog_text)
+
+        # Botão Salvar
+        tk.Button(top, text="Salvar e Reiniciar", command=lambda: self.save_config(top),
+                  bg=COLORS['success'], fg="white", font=("Segoe UI", 11, "bold"),
+                  relief="flat", pady=8).pack(fill=tk.X, padx=20, pady=20)
+
+    def save_config(self, window):
+        novas_lat = {}
+        for op, entry in self.entries_lat.items():
+            try: novas_lat[op] = int(entry.get())
+            except: pass
+            
+        novos_regs = {}
+        raw = self.txt_regs.get("1.0", tk.END).replace("\n", "").split(",")
+        for item in raw:
+            parts = item.split("=")
+            if len(parts)==2:
+                try: novos_regs[parts[0].strip().upper()] = int(parts[1])
+                except: pass
+                
+        prog = self.txt_prog.get("1.0", tk.END).strip().split("\n")
+        
+        self.sim.set_config(novas_lat, novos_regs)
+        self.sim.reset()
+        self.sim.carregar_instrucoes(prog)
+        window.destroy()
+        self.log_msg("Configuração atualizada.")
+        self.update_view()
+
+    def mostrar_relatorio(self):
+        m = self.sim.metricas
+        ciclos = self.sim.ciclo
+        ipc = m['commits'] / ciclos if ciclos > 0 else 0
+        relatorio = (
+            f"Ciclos Totais: {ciclos}\n"
+            f"Instruções Commitadas: {m['commits']}\n"
+            f"IPC: {ipc:.2f}\n"
+            f"Bolhas (Stalls): {m['bolhas']}\n"
+            f"Flushes: {m['flushes']}\n"
+        )
+        messagebox.showinfo("Resultados", relatorio)
 
 if __name__ == "__main__":
     root = tk.Tk()
