@@ -187,7 +187,7 @@ class TomasuloGUI:
             qj = rs.qj if rs.qj is not None else ""
             qk = rs.qk if rs.qk is not None else ""
             dest = rs.dest if rs.busy else ""
-            status_busy = "🔴 Busy" if rs.busy else "🟢 Free"
+            status_busy = "❌ Busy" if rs.busy else "✅ Free"
             self.tree_rs.insert("", "end", values=(rs.nome, status_busy, rs.op if rs.op else "-", rs.vj if rs.vj is not None else "-", rs.vk if rs.vk is not None else "-", qj, qk, dest, rs.tempo_restante))
 
         for rob in self.sim.rob:
