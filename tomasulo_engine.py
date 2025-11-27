@@ -41,6 +41,7 @@ class SimuladorTomasulo:
         self.latencias = {'ADD': 2, 'SUB': 2, 'MUL': 8, 'DIV': 10, 'BEQ': 1}
         self.regs_iniciais = {'R1': 10, 'R2': 20, 'R3': 30} 
         self.history = [] 
+        self.prog_original = [] # Armazena o programa original para saltos
         self.reset()
 
     def set_config(self, latencias_novas, regs_novos):
@@ -75,17 +76,26 @@ class SimuladorTomasulo:
         
         self.rs_add = [EstacaoReserva(f'ADD_{i}', 'ADD') for i in range(3)]
         self.rs_mul = [EstacaoReserva(f'MUL_{i}', 'MUL') for i in range(2)]
+        
+        # Recria o prog_original no reset
+        if hasattr(self, 'prog_original') and self.prog_original:
+             # Se for um reset no meio da simulação, mantemos o programa.
+             # Senão, ele será carregado em carregar_instrucoes.
+             pass
 
     def log(self, msg):
         self.log_msg += msg + "\n"
 
     def carregar_instrucoes(self, lista_instrucoes):
         self.fila_instrucoes = []
+        self.prog_original = [] # Limpa e carrega o programa original
         for i, txt in enumerate(lista_instrucoes):
             if not txt.strip(): continue
             partes = txt.replace(',', '').split()
             if len(partes) >= 4:
-                self.fila_instrucoes.append(Instrucao(partes[0], partes[1], partes[2], partes[3], i))
+                instr = Instrucao(partes[0], partes[1], partes[2], partes[3], i)
+                self.fila_instrucoes.append(instr)
+                self.prog_original.append(instr) # Salva no programa original
 
     def get_rs_livre(self, op):
         lista = self.rs_mul if op in ['MUL', 'DIV'] else self.rs_add
@@ -96,7 +106,7 @@ class SimuladorTomasulo:
 
     def salvar_estado(self):
         estado_atual = copy.deepcopy(self.__dict__)
-        del estado_atual['history'] 
+        del estado_atual['history']
         self.history.append(estado_atual)
 
     def voltar_ciclo(self):
@@ -104,7 +114,11 @@ class SimuladorTomasulo:
             return "Já está no início."
         
         estado_anterior = self.history.pop()
+        # Evitar sobrescrever a lista de histórico (que estamos voltando) e o programa original (que deve ser mantido)
+        prog_original_temp = self.prog_original
         self.__dict__.update(estado_anterior)
+        self.prog_original = prog_original_temp
+
         if not hasattr(self, 'history'):
             self.history = []
         return f"Voltou para Ciclo {self.ciclo}"
@@ -153,11 +167,11 @@ class SimuladorTomasulo:
                         self.rat[rob_entry.dest] = None
                     self.regs[rob_entry.dest] = rob_entry.valor
                 
-                rob_entry.busy = False
-                self.head = (self.head + 1) % self.tamanho_rob
-                self.itens_no_rob -= 1
-                instr.estado = "COMMITADO"
-
+                    rob_entry.busy = False
+                    self.head = (self.head + 1) % self.tamanho_rob
+                    self.itens_no_rob -= 1
+                    instr.estado = "COMMITADO"
+        
         # --- 2. WRITE RESULT ---
         todas_rs = self.rs_add + self.rs_mul
         for rs in todas_rs:
@@ -173,6 +187,7 @@ class SimuladorTomasulo:
                 
                 self.log(f"[WRITE] {rs.nome} terminou. Val={resultado} -> ROB {rs.dest}")
                 
+                # Se for BEQ, o valor não importa, apenas a sinalização de pronto.
                 self.rob[rs.dest].valor = resultado
                 self.rob[rs.dest].pronto = True
                 
@@ -231,18 +246,20 @@ class SimuladorTomasulo:
                 else:
                     rs_livre.vj = self.regs.get(instr.s1, 0)
 
+                # O segundo operando (s2) pode ser um registrador, um literal (para ADD/MUL, etc) 
+                # ou o ALVO de salto (para BEQ).
                 if instr.s2 in self.rat and self.rat[instr.s2] is not None:
                     rob_produtor = self.rat[instr.s2]
                     if self.rob[rob_produtor].pronto:
                         rs_livre.vk = self.rob[rob_produtor].valor
                     else:
                         rs_livre.qk = rob_produtor
+                elif instr.s2 in self.regs:
+                    rs_livre.vk = self.regs[instr.s2]
                 else:
-                    if instr.s2 in self.regs:
-                        rs_livre.vk = self.regs[instr.s2]
-                    else:
-                        try: rs_livre.vk = int(instr.s2)
-                        except: rs_livre.vk = 0
+                    # Trata o s2 como um literal (valor) ou alvo de salto (para BEQ)
+                    try: rs_livre.vk = int(instr.s2)
+                    except: rs_livre.vk = 0
 
                 if instr.op != 'BEQ':
                     self.rat[instr.dest] = rob_id

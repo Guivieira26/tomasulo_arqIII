@@ -172,7 +172,8 @@ class TomasuloGUI:
 
     def load_example(self):
         self.reset_sim()
-        prog = ["ADD R1, R2, R3", "MUL R4, R1, R2", "SUB R5, R3, R1", "DIV R6, R4, R2"]
+        # Exemplo que demonstra um salto (o índice 4 é a instrução 'MUL R6, R4, R2')
+        prog = ["ADD R1, R2, R3", "BEQ R2, R2, 4", "MUL R4, R1, R2", "DIV R6, R4, R2", "MUL R6, R4, R2", "SUB R5, R3, R1"]
         self.sim.carregar_instrucoes(prog)
         self.log_msg("Exemplo carregado.")
         self.update_view()
@@ -234,9 +235,12 @@ class TomasuloGUI:
         self.txt_prog = tk.Text(top, height=8, font=("Consolas", 10), relief="flat", bd=1)
         self.txt_prog.pack(padx=20, fill=tk.BOTH, expand=True)
         prog_text = ""
-        for inst in self.sim.fila_instrucoes:
-            prog_text += f"{inst.op} {inst.dest}, {inst.s1}, {inst.s2}\n"
-        if not prog_text: prog_text = "ADD R1, R2, R3\nMUL R4, R1, R2\nSUB R5, R3, R1\nDIV R6, R4, R2"
+        # Reconstroi o texto do programa a partir de prog_original (se existir)
+        if self.sim.prog_original:
+            for inst in self.sim.prog_original:
+                prog_text += f"{inst.op} {inst.dest}, {inst.s1}, {inst.s2}\n"
+        
+        if not prog_text: prog_text = "ADD R1, R2, R3\nBEQ R2, R2, 4\nMUL R4, R1, R2\nDIV R6, R4, R2\nMUL R6, R4, R2\nSUB R5, R3, R1"
         self.txt_prog.insert(tk.END, prog_text)
 
         tk.Button(top, text="Salvar e Reiniciar", command=lambda: self.save_config(top), bg=COLORS['success'], fg="white", font=("Segoe UI", 11, "bold"), relief="flat", pady=8).pack(fill=tk.X, padx=20, pady=20)
@@ -256,7 +260,7 @@ class TomasuloGUI:
         prog = self.txt_prog.get("1.0", tk.END).strip().split("\n")
         self.sim.set_config(novas_lat, novos_regs)
         self.sim.reset()
-        self.sim.carregar_instrucoes(prog)
+        self.sim.carregar_instrucoes(prog) # Usa o método atualizado
         window.destroy()
         self.log_msg("Configuração atualizada.")
         self.update_view()
