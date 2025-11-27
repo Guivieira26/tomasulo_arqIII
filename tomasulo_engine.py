@@ -79,8 +79,6 @@ class SimuladorTomasulo:
         
         # Recria o prog_original no reset
         if hasattr(self, 'prog_original') and self.prog_original:
-             # Se for um reset no meio da simulação, mantemos o programa.
-             # Senão, ele será carregado em carregar_instrucoes.
              pass
 
     def log(self, msg):
@@ -114,7 +112,6 @@ class SimuladorTomasulo:
             return "Já está no início."
         
         estado_anterior = self.history.pop()
-        # Evitar sobrescrever a lista de histórico (que estamos voltando) e o programa original (que deve ser mantido)
         prog_original_temp = self.prog_original
         self.__dict__.update(estado_anterior)
         self.prog_original = prog_original_temp
@@ -125,6 +122,46 @@ class SimuladorTomasulo:
 
     def esta_terminado(self):
         return len(self.fila_instrucoes) == 0 and self.itens_no_rob == 0
+    
+    def limpar_estado_apos_rob(self, rob_id_commitado):
+        """Limpa RS e RAT e resetta o ROB para o estado pós-BEQ."""
+        
+        self.log(f"--- [FLUSH DETECTADO] ---")
+
+        # 1. Limpa entradas do RAT que apontam para o ROB/RS
+        for reg in self.rat:
+            rob_ref = self.rat[reg]
+            if rob_ref is not None:
+                # Se o ROB for posterior ou igual ao BEQ, o RAT precisa ser limpo
+                # para que o próximo uso do registrador leia do Banco de Registradores
+                if rob_ref != rob_id_commitado: # O BEQ no Head será limpo no commit
+                     self.rat[reg] = None
+        
+        # 2. Limpa todas as Estações de Reserva (RS)
+        todas_rs = self.rs_add + self.rs_mul
+        for rs in todas_rs:
+            rs.__init__(rs.nome, rs.tipo)
+        
+        # 3. Limpa entradas do ROB (exceto o que está no Head - que é o BEQ e será desocupado)
+        self.rob = [EntradaROB(i) for i in range(self.tamanho_rob)]
+        self.head = (rob_id_commitado + 1) % self.tamanho_rob
+        self.tail = self.head
+        self.itens_no_rob = 0
+        self.log(f"Estado Especulativo (RS, RAT, ROB) Limpo.")
+
+    def atualizar_fila_instrucoes(self, target_index):
+        """Atualiza a fila de instruções para continuar a partir do alvo do desvio."""
+        
+        try:
+            target_index = int(target_index)
+            if 0 <= target_index < len(self.prog_original):
+                self.fila_instrucoes = [copy.deepcopy(instr) for instr in self.prog_original[target_index:]]
+                self.log(f"Fila de Instruções atualizada. Próxima instrução a ser emitida é: {self.fila_instrucoes[0]}")
+            else:
+                self.fila_instrucoes = []
+                self.log("Fila de Instruções zerada. Alvo de salto fora do programa.")
+        except ValueError:
+            self.log(f"Erro: Alvo de salto inválido ({target_index}). Fila de Instruções não atualizada.")
 
     def executar_ciclo(self):
         if self.esta_terminado():
@@ -142,22 +179,32 @@ class SimuladorTomasulo:
                 
                 # --- LÓGICA DE ESPECULAÇÃO/FLUSH ---
                 if instr.op == 'BEQ':                    
-                    # 1. Busca os valores dos dois registradores a serem comparados
-                    val_op1 = self.regs.get(instr.dest, 0) # Primeiro operando
-                    val_op2 = self.regs.get(instr.s1, 0)   # Segundo operando
+                    val_op1 = self.regs.get(instr.dest, 0)
+                    val_op2 = self.regs.get(instr.s1, 0)
+                    target_index = instr.s2 # Alvo de salto é o s2 da instrução BEQ
                     
-                    # 2. Verifica se a condição é verdadeira
                     condicao_verdadeira = (val_op1 == val_op2)
                     
-                    # 3. Se é verdadeira, ele DEVERIA ter pulado. 
-                    # Como nossa estratégia é "Predict Not Taken", nós erramos -> FLUSH.
                     if condicao_verdadeira:
-                        self.log(f"[FLUSH] Erro de Especulação na {instr}. R{instr.dest}({val_op1}) == R{instr.s1}({val_op2})")
+                        # Erro de Predição (Predict Not Taken) -> FLUSH
+                        self.log(f"[FLUSH] Erro de Especulação na {instr}. {instr.dest}({val_op1}) == {instr.s1}({val_op2}).")
                         self.metricas['flushes'] += 1
+                        
+                        # A. Limpar estado especulativo
+                        self.limpar_estado_apos_rob(rob_entry.id)
+                        
+                        # B. Mudar o fluxo de controle (PC)
+                        self.atualizar_fila_instrucoes(target_index)
+                        
                     else:
+                        # Sucesso de Predição (Predict Not Taken estava correto) -> Commit normal
                         self.log(f"[COMMIT] Sucesso na Especulação da {instr} (Não tomou desvio).")
                         self.metricas['commits'] += 1
-
+                        rob_entry.busy = False
+                        self.head = (self.head + 1) % self.tamanho_rob
+                        self.itens_no_rob -= 1
+                        instr.estado = "COMMITADO"
+                        
                 else:
                     # Instrução normal (ADD, MUL, etc)
                     self.log(f"[COMMIT] Instr {instr.id} ({instr.op}) no ROB {rob_entry.id} -> Regs")
